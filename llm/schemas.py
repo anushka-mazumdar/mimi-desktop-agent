@@ -15,11 +15,19 @@ class AgentResponse(BaseModel):
     intent: IntentType = Field(
         description="The identified intent of the user's request"
     )
+    application: str = Field(
+        default="system",
+        description="The application or capability that should execute the request (browser, word, excel, paint, vision, voice, memory, system)"
+    )
     target: str = Field(
         description="The target object of the action (website name, search query, document context, etc.)"
     )
     action: str = Field(
         description="The specific action to perform"
+    )
+    parameters: Dict[str, Any] = Field(
+        default_factory=dict,
+        description="Optional action-specific parameters"
     )
     url: str = Field(
         default="",
@@ -45,6 +53,14 @@ class AgentResponse(BaseModel):
             return f"https://{value}"
         return value
 
+    @field_validator("application")
+    @classmethod
+    def validate_application(cls, value: str) -> str:
+        valid_apps = ["browser", "word", "excel", "paint", "vision", "voice", "memory", "system"]
+        if value.lower() not in valid_apps:
+            return "system"
+        return value.lower()
+
     def to_dict(self) -> Dict[str, Any]:
         return self.model_dump()
 
@@ -60,43 +76,74 @@ if __name__ == "__main__":
     examples = [
         {
             "intent": "open_website",
+            "application": "browser",
             "target": "youtube",
             "action": "open",
+            "parameters": {},
             "url": "https://www.youtube.com",
             "confidence": 0.95
         },
         {
             "intent": "browser_search",
+            "application": "browser",
             "target": "AI jobs",
             "action": "search",
+            "parameters": {},
             "url": "",
             "confidence": 0.95
         },
         {
             "intent": "word_action",
+            "application": "word",
             "target": "document",
             "action": "insert_blank_page",
+            "parameters": {},
             "url": "",
             "confidence": 0.90
         },
         {
-            "intent": "excel_action",
-            "target": "budget",
-            "action": "create_template",
+            "intent": "word_action",
+            "application": "word",
+            "target": "document",
+            "action": "format_text",
+            "parameters": {
+                "alignment": "center",
+                "tone": "professional"
+            },
             "url": "",
             "confidence": 0.85
         },
         {
             "intent": "paint_action",
+            "application": "paint",
             "target": "canvas",
-            "action": "draw_circle",
+            "action": "draw_shape",
+            "parameters": {
+                "shape": "circle",
+                "radius": 100,
+                "color": "blue"
+            },
             "url": "",
             "confidence": 0.90
         },
         {
+            "intent": "excel_action",
+            "application": "excel",
+            "target": "budget",
+            "action": "apply_formula",
+            "parameters": {
+                "formula": "SUM",
+                "range": "A1:A10"
+            },
+            "url": "",
+            "confidence": 0.85
+        },
+        {
             "intent": "unknown",
+            "application": "system",
             "target": "",
-            "action": "",
+            "action": "error",
+            "parameters": {},
             "url": "",
             "confidence": 0.0
         }

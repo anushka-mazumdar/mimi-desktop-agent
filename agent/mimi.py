@@ -1,5 +1,5 @@
-# agent/mimi.py
 import logging
+import json
 from typing import Dict, Any
 from llm.llm_client import LLMClient
 from llm.schemas import AgentResponse, IntentType
@@ -16,7 +16,7 @@ class MimiAgent:
 
     def process_command(self, command: str) -> Dict[str, Any]:
         try:
-            logger.info(f"Command received: {command}")
+            logger.info(f"Received Command: {command}")
             
             if not command or not command.strip():
                 logger.warning("Empty command received")
@@ -26,9 +26,27 @@ class MimiAgent:
                     "execution_success": False
                 }
             
-            logger.info("Sending to LLMClient...")
+            logger.info("LLM Analysis Started")
             agent_response = self.llm_client.analyze_command(command)
-            logger.info(f"LLM response received: Intent={agent_response.intent}, Target={agent_response.target}, Action={agent_response.action}")
+            logger.info("LLM Analysis Finished")
+            
+            logger.info(f"Application: {agent_response.application}")
+            logger.info(f"Intent: {agent_response.intent}")
+            logger.info(f"Action: {agent_response.action}")
+            if agent_response.target:
+                logger.info(f"Target: {agent_response.target}")
+            if agent_response.parameters:
+                logger.info(f"Parameters: {json.dumps(agent_response.parameters, indent=2)}")
+            if agent_response.url:
+                logger.info(f"URL: {agent_response.url}")
+            logger.info(f"Confidence: {agent_response.confidence}")
+            
+            if agent_response.parameters.get("clarification_required", False):
+                logger.info("Clarification required, returning to UI layer")
+                return {
+                    "response": agent_response,
+                    "execution_success": False
+                }
             
             if agent_response.intent == IntentType.UNKNOWN:
                 logger.warning("Unknown intent detected, skipping execution")
@@ -37,15 +55,15 @@ class MimiAgent:
                     "execution_success": False
                 }
             
-            logger.info("Sending to Executor...")
+            logger.info("Executor Started")
             execution_success = self.executor.execute(agent_response)
+            logger.info("Executor Finished")
             
             if execution_success:
-                logger.info("Execution successful")
+                logger.info("Execution Successful")
             else:
-                logger.warning("Execution failed")
+                logger.warning("Execution Failed")
             
-            logger.info("Final result returned")
             return {
                 "response": agent_response,
                 "execution_success": execution_success
@@ -62,21 +80,27 @@ class MimiAgent:
     def _error_response(self, error_message: str) -> AgentResponse:
         return AgentResponse(
             intent=IntentType.UNKNOWN,
+            application="unknown",
             target="",
             action="error",
+            parameters={},
             url="",
             confidence=0.0
-            )
+        )
 
 
 if __name__ == "__main__":
     test_commands = [
         "Open YouTube",
-        "Open GitHub",
         "Search Google for AI jobs",
-        "Open LinkedIn",
-        "Add a blank page in Word",
-        "Some random command that doesnt make sense"
+        "Open GitHub",
+        "Insert a blank page",
+        "Center the selected text",
+        "Justify the whole document",
+        "Rewrite the selected paragraph professionally",
+        "Summarize the selected text",
+        "Save the document",
+        "Create a new document"
     ]
 
     print("MimiAgent Test")
@@ -91,9 +115,12 @@ if __name__ == "__main__":
         response = result["response"]
         execution_success = result["execution_success"]
         
+        print(f"Application: {response.application}")
         print(f"Intent: {response.intent}")
         print(f"Target: {response.target}")
         print(f"Action: {response.action}")
+        if response.parameters:
+            print(f"Parameters: {json.dumps(response.parameters, indent=2)}")
         if response.url:
             print(f"URL: {response.url}")
         print(f"Confidence: {response.confidence}")

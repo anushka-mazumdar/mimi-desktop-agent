@@ -1,6 +1,6 @@
 import sys
 import traceback
-from typing import Optional
+from typing import Optional, Dict, Any
 import customtkinter as ctk
 from ui.mimi_pet import MimiPet
 from agent.mimi import MimiAgent
@@ -17,9 +17,12 @@ def setup_root_window() -> ctk.CTk:
 def print_agent_result(command: str, response: AgentResponse, execution_success: bool) -> None:
     print("\n" + "=" * 60)
     print(f"Command Received: {command}")
+    print(f"Application: {response.application}")
     print(f"Intent: {response.intent}")
     print(f"Target: {response.target}")
     print(f"Action: {response.action}")
+    if response.parameters:
+        print(f"Parameters: {response.parameters}")
     if response.url:
         print(f"URL: {response.url}")
     print(f"Confidence: {response.confidence}")
@@ -36,7 +39,14 @@ def launch_mimi() -> Optional[MimiPet]:
         agent = MimiAgent()
         pet.run()
 
-        def handle_task_submission(task: str) -> None:
+        clarification_state: Dict[str, Any] = {
+            "active": False,
+            "original_command": "",
+            "question": "",
+            "options": []
+        }
+
+        def process_command(task: str) -> None:
             print(f"\nCommand Received: {task}")
             
             pet.state_manager.set_state(WidgetState.THINKING)
@@ -46,11 +56,28 @@ def launch_mimi() -> Optional[MimiPet]:
                 response = result["response"]
                 execution_success = result["execution_success"]
                 
+                if response.parameters.get("clarification_required", False):
+                    print("Clarification Requested")
+                    clarification_state["active"] = True
+                    clarification_state["original_command"] = task
+                    clarification_state["question"] = response.parameters.get("question", "Which application should I use?")
+                    clarification_state["options"] = response.parameters.get("options", [])
+                    
+                    pet.command_bar.input_field.delete(0, "end")
+                    pet.command_bar.input_field.configure(
+                        placeholder_text=clarification_state["question"]
+                    )
+                    pet.command_bar.focus_input()
+                    pet.state_manager.set_state(WidgetState.INPUT_OPEN)
+                    return
+                
                 print_agent_result(task, response, execution_success)
                 
                 if execution_success:
+                    print("Execution Successful")
                     pet.state_manager.set_state(WidgetState.SUCCESS)
                 else:
+                    print("Execution Failed")
                     pet.state_manager.set_state(WidgetState.ERROR)
                     
             except Exception as e:
@@ -58,6 +85,53 @@ def launch_mimi() -> Optional[MimiPet]:
                 pet.state_manager.set_state(WidgetState.ERROR)
             
             root.after(1000, lambda: pet.state_manager.set_state(WidgetState.IDLE))
+
+        def handle_task_submission(task: str) -> None:
+            if clarification_state["active"]:
+                print(f"Clarification Answer: {task}")
+                
+                original = clarification_state["original_command"]
+                combined = f"{original} in {task}"
+                print(f"Combined Command: {combined}")
+                
+                clarification_state["active"] = False
+                clarification_state["original_command"] = ""
+                clarification_state["question"] = ""
+                clarification_state["options"] = []
+                
+                pet.command_bar.input_field.configure(
+                    placeholder_text="Enter a task..."
+                )
+                
+                pet.command_bar.hide_bar()
+                process_command(combined)
+                return
+            
+            process_command(task)
+
+        def handle_clarification_cancel() -> None:
+            if clarification_state["active"]:
+                print("Clarification Cancelled")
+                clarification_state["active"] = False
+                clarification_state["original_command"] = ""
+                clarification_state["question"] = ""
+                clarification_state["options"] = []
+                pet.command_bar.input_field.configure(
+                    placeholder_text="Enter a task..."
+                )
+                pet.command_bar.hide_bar()
+                pet.state_manager.set_state(WidgetState.IDLE)
+
+        original_handle_escape = pet.command_bar._handle_escape
+        
+        def custom_handle_escape(event=None):
+            if clarification_state["active"]:
+                handle_clarification_cancel()
+            else:
+                original_handle_escape(event)
+        
+        pet.command_bar._handle_escape = custom_handle_escape
+        pet.command_bar.bind("<Escape>", custom_handle_escape)
 
         pet.command_bar.on_submit(handle_task_submission)
 

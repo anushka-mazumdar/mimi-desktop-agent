@@ -1,7 +1,7 @@
 import os
 import json
 import logging
-from typing import Optional
+from typing import Optional, Dict, Any
 from dotenv import load_dotenv
 from groq import Groq
 from config.prompts import get_system_prompt
@@ -22,19 +22,38 @@ class LLMClient:
         self.client = Groq(api_key=self.api_key)
         self.model = "llama-3.3-70b-versatile"
         self.system_prompt = get_system_prompt()
+        
+        self.transform_prompts = {
+            "rewrite": "Rewrite the following text to make it better. Improve clarity, flow, and engagement. Keep the same general meaning but make it more polished.\n\nText: {text}\n\nImproved version:",
+            "rewrite_professional": "Rewrite the following text to sound more professional and formal. Use appropriate business language and tone.\n\nText: {text}\n\nProfessional version:",
+            "rewrite_casual": "Rewrite the following text to sound more casual and conversational. Make it friendly and approachable.\n\nText: {text}\n\nCasual version:",
+            "summarize": "Summarize the following text concisely. Capture only the most important key points. Keep it brief.\n\nText: {text}\n\nSummary:",
+            "translate": "Translate the following text to {language}. Provide only the translation, no additional text.\n\nText: {text}\n\nTranslation:",
+            "fix_grammar": "Fix the grammar and spelling in the following text. Correct any errors while preserving the original meaning and style.\n\nText: {text}\n\nCorrected version:",
+            "expand": "Expand and elaborate on the following text. Add more detail, examples, and depth. Make it more comprehensive.\n\nText: {text}\n\nExpanded version:",
+            "shorten": "Shorten the following text concisely. Remove unnecessary words, repetition, and fluff while preserving key meaning.\n\nText: {text}\n\nShortened version:",
+            "bullets": "Convert the following text into bullet points. Use clear, concise points. Format as a bulleted list.\n\nText: {text}\n\nBullet points:",
+            "paragraph": "Convert the following text into a well-structured paragraph. Ensure smooth flow and logical organization.\n\nText: {text}\n\nParagraph:"
+        }
+        
         logger.info("LLMClient initialized successfully")
 
-    def analyze_command(self, command: str) -> AgentResponse:
+    def analyze_command(self, command: str, session_context: Optional[str] = None) -> AgentResponse:
         try:
             logger.info(f"Analyzing command: {command}")
             
-            full_prompt = f"{self.system_prompt}\n\nUser: {command}\nMimi:"
+            if session_context:
+                logger.info("Session context provided")
+                full_prompt = f"{session_context}\n\nUser: {command}"
+                logger.info(f"Enhanced prompt with context")
+            else:
+                full_prompt = command
             
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=[
                     {"role": "system", "content": self.system_prompt},
-                    {"role": "user", "content": command}
+                    {"role": "user", "content": full_prompt}
                 ],
                 temperature=0.1,
                 max_tokens=256,
@@ -56,6 +75,64 @@ class LLMClient:
         except Exception as e:
             logger.error(f"LLM API error: {e}")
             return self._error_response()
+
+    def transform_text(self, text: str, action: str, parameters: Dict[str, Any] = None) -> Optional[str]:
+        try:
+            if not text or not text.strip():
+                logger.warning("Empty text provided for transformation")
+                return None
+            
+            if parameters is None:
+                parameters = {}
+            
+            logger.info(f"Transforming text with action: {action}")
+            
+            mapped_action = self._map_action(action, parameters)
+            
+            if mapped_action not in self.transform_prompts:
+                logger.error(f"Unsupported transformation action: {action}")
+                return None
+            
+            prompt_template = self.transform_prompts[mapped_action]
+            
+            if mapped_action == "translate":
+                language = parameters.get("language", "English")
+                prompt = prompt_template.format(text=text, language=language)
+            else:
+                prompt = prompt_template.format(text=text)
+            
+            logger.info(f"Sending transformation request to LLM")
+            
+            response = self.client.chat.completions.create(
+                model=self.model,
+                messages=[
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=0.3,
+                max_tokens=2048,
+                top_p=0.95
+            )
+            
+            transformed_text = response.choices[0].message.content.strip()
+            logger.info(f"Transformation successful. Result length: {len(transformed_text)}")
+            
+            return transformed_text
+            
+        except Exception as e:
+            logger.error(f"Text transformation failed: {e}")
+            return None
+
+    def _map_action(self, action: str, parameters: Dict[str, Any]) -> str:
+        if action == "rewrite":
+            tone = parameters.get("tone", "better")
+            if tone == "professional":
+                return "rewrite_professional"
+            elif tone == "casual":
+                return "rewrite_casual"
+            else:
+                return "rewrite"
+        
+        return action
 
     def _clean_json_response(self, raw_response: str) -> str:
         cleaned = raw_response.strip()
@@ -121,7 +198,7 @@ class LLMClient:
             parameters={},
             url="",
             confidence=0.0
-        )
+            )
 
 
 if __name__ == "__main__":
@@ -156,6 +233,54 @@ if __name__ == "__main__":
                 print(f"  URL: {result.url}")
             print(f"  Confidence: {result.confidence}")
             print("=" * 60)
+            
+        print("\n" + "=" * 60)
+        print("Testing Text Transformation")
+        print("=" * 60)
+        
+        test_text = "This is a test document. It needs to be improved. The grammar is not great and it could be more professional."
+        
+        test_actions = [
+            ("rewrite", {}),
+            ("rewrite", {"tone": "professional"}),
+            ("summarize", {}),
+            ("fix_grammar", {}),
+            ("expand", {}),
+            ("shorten", {}),
+            ("bullets", {}),
+            ("paragraph", {})
+        ]
+        
+        for action, params in test_actions:
+            print(f"\nAction: {action} (params: {params})")
+            result = client.transform_text(test_text, action, params)
+            if result:
+                print(f"Result: {result[:200]}...")
+            else:
+                print("Result: FAILED")
+            print("-" * 40)
+            
+        print("\n" + "=" * 60)
+        print("Testing Session Context")
+        print("=" * 60)
+        
+        context = """Session Context:
+  - Current Application: Word
+  - Current Document: Report.docx
+  - Current Task: Editing Document
+  - Last Action: insert_text
+  - Last Result: Success
+  - Last Activity: 02:30 PM"""
+        
+        print(f"With context:\n{context}")
+        command = "Insert a blank page"
+        result = client.analyze_command(command, session_context=context)
+        print(f"\nParsed AgentResponse:")
+        print(f"  Intent: {result.intent}")
+        print(f"  Application: {result.application}")
+        print(f"  Target: {result.target}")
+        print(f"  Action: {result.action}")
+        print(f"  Confidence: {result.confidence}")
             
     except Exception as e:
         print(f"Test failed: {e}")

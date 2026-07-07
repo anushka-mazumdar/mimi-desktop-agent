@@ -1,5 +1,6 @@
 import logging
 from typing import Optional
+from llm.llm_client import LLMClient
 from llm.schemas import AgentResponse, IntentType
 from capabilities.browser.browser_controller import BrowserController
 from capabilities.office.word_controller import WordController
@@ -8,7 +9,8 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 class Executor:
-    def __init__(self):
+    def __init__(self, llm_client: Optional[LLMClient] = None):
+        self.llm_client = llm_client
         self.browser = None
         self.word = None
         logger.info("Executor initialized successfully")
@@ -40,7 +42,7 @@ class Executor:
     def _get_word(self) -> WordController:
         if self.word is None:
             logger.info("Initializing WordController")
-            self.word = WordController()
+            self.word = WordController(llm_client=self.llm_client)
         return self.word
 
     def _execute_browser(self, response: AgentResponse) -> bool:
@@ -93,11 +95,13 @@ class Executor:
 
 if __name__ == "__main__":
     from llm.schemas import AgentResponse, IntentType
+    from llm.llm_client import LLMClient
     
     print("Testing Executor")
     print("=" * 60)
     
-    executor = Executor()
+    llm_client = LLMClient()
+    executor = Executor(llm_client=llm_client)
     
     test_responses = [
         AgentResponse(
@@ -149,7 +153,7 @@ if __name__ == "__main__":
             intent=IntentType.WORD_ACTION,
             application="word",
             target="selection",
-            action="rewrite_selection",
+            action="rewrite",
             parameters={"tone": "professional"},
             url="",
             confidence=0.80
@@ -158,7 +162,7 @@ if __name__ == "__main__":
             intent=IntentType.WORD_ACTION,
             application="word",
             target="selection",
-            action="summarize_selection",
+            action="summarize",
             parameters={},
             url="",
             confidence=0.80

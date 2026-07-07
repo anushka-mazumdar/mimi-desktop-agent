@@ -32,6 +32,7 @@ def print_agent_result(command: str, response: AgentResponse, execution_success:
 def launch_mimi() -> Optional[MimiPet]:
     try:
         print("Mimi Desktop Agent Starting...")
+        print("Session Started")
         
         root = setup_root_window()
         
@@ -75,6 +76,7 @@ def launch_mimi() -> Optional[MimiPet]:
                 
                 if execution_success:
                     print("Execution Successful")
+                    print("Context Updated")
                     pet.state_manager.set_state(WidgetState.SUCCESS)
                 else:
                     print("Execution Failed")
@@ -136,7 +138,9 @@ def launch_mimi() -> Optional[MimiPet]:
         pet.command_bar.on_submit(handle_task_submission)
 
         def on_closing():
-            print("\nMimi Desktop Agent Closed")
+            print("\nContext Cleared")
+            agent.session_context.clear()
+            print("Mimi Desktop Agent Closed")
             root.quit()
             root.destroy()
 
@@ -145,7 +149,8 @@ def launch_mimi() -> Optional[MimiPet]:
         return pet
 
     except KeyboardInterrupt:
-        print("\nMimi Desktop Agent Closed")
+        print("\nContext Cleared")
+        print("Mimi Desktop Agent Closed")
         sys.exit(0)
 
     except Exception as e:

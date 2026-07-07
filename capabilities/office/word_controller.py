@@ -4,16 +4,22 @@ from typing import List, Dict, Any, Optional
 import pythoncom
 import win32com.client
 from win32com.client import constants
+from llm.llm_client import LLMClient
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 class WordController:
-    def __init__(self):
+    def __init__(self, llm_client: Optional[LLMClient] = None):
+        self.llm_client = llm_client
         self.word = None
         self.doc = None
         self._connected = False
         self._connect_to_word()
+        if self.llm_client:
+            logger.info("WordController initialized with LLMClient")
+        else:
+            logger.warning("WordController initialized without LLMClient - AI actions will not work")
         logger.info("WordController initialized successfully")
 
     def _connect_to_word(self) -> bool:
@@ -84,6 +90,36 @@ class WordController:
             logger.error(f"Error in _preserve_selection: {e}")
             return False
 
+    def _get_selected_text(self) -> Optional[str]:
+        try:
+            if not self._ensure_document():
+                return None
+            selection = self.word.Selection
+            if selection.Type == constants.wdSelectionIP:
+                logger.info("No text selected")
+                return ""
+            text = selection.Text
+            logger.info(f"Got selected text: {text[:50]}...")
+            return text
+        except Exception as e:
+            logger.error(f"Failed to get selected text: {e}")
+            return None
+
+    def _replace_selection(self, new_text: str) -> bool:
+        try:
+            if not self._ensure_document():
+                return False
+            if not new_text:
+                logger.error("No text provided to replace selection")
+                return False
+            selection = self.word.Selection
+            selection.Text = new_text
+            logger.info(f"Replaced selected text with: {new_text[:50]}...")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to replace selected text: {e}")
+            return False
+
     def supported_actions(self) -> List[str]:
         return [
             "create_document",
@@ -109,12 +145,12 @@ class WordController:
             "format_text",
             "undo",
             "redo",
-            "rewrite_selection",
-            "summarize_selection",
-            "translate_selection",
+            "rewrite",
+            "summarize",
+            "translate",
             "fix_grammar",
-            "expand_selection",
-            "shorten_selection",
+            "expand",
+            "shorten",
             "convert_to_bullets",
             "convert_to_paragraph"
         ]
@@ -149,12 +185,12 @@ class WordController:
             "format_text": self._format_text,
             "undo": self._undo,
             "redo": self._redo,
-            "rewrite_selection": self._rewrite_selection,
-            "summarize_selection": self._summarize_selection,
-            "translate_selection": self._translate_selection,
+            "rewrite": self._rewrite_selection,
+            "summarize": self._summarize_selection,
+            "translate": self._translate_selection,
             "fix_grammar": self._fix_grammar,
-            "expand_selection": self._expand_selection,
-            "shorten_selection": self._shorten_selection,
+            "expand": self._expand_selection,
+            "shorten": self._shorten_selection,
             "convert_to_bullets": self._convert_to_bullets,
             "convert_to_paragraph": self._convert_to_paragraph
         }
@@ -516,43 +552,228 @@ class WordController:
             return False
 
     def _rewrite_selection(self, parameters: Dict[str, Any] = None) -> bool:
-        logger.info("AI action rewrite_selection not implemented yet")
-        return False
+        try:
+            if not self.llm_client:
+                logger.error("LLMClient not available for rewrite action")
+                return False
+            
+            logger.info("Getting selected text for rewrite")
+            selected_text = self._get_selected_text()
+            if not selected_text or not selected_text.strip():
+                logger.warning("No text selected for rewrite")
+                return False
+            
+            logger.info("Starting AI rewrite transformation")
+            result = self.llm_client.transform_text(selected_text, "rewrite", parameters)
+            
+            if result is None:
+                logger.error("AI rewrite transformation failed")
+                return False
+            
+            logger.info("Replacing selected text with rewritten version")
+            return self._replace_selection(result)
+            
+        except Exception as e:
+            logger.error(f"Failed to rewrite selection: {e}")
+            return False
 
     def _summarize_selection(self, parameters: Dict[str, Any] = None) -> bool:
-        logger.info("AI action summarize_selection not implemented yet")
-        return False
+        try:
+            if not self.llm_client:
+                logger.error("LLMClient not available for summarize action")
+                return False
+            
+            logger.info("Getting selected text for summarize")
+            selected_text = self._get_selected_text()
+            if not selected_text or not selected_text.strip():
+                logger.warning("No text selected for summarize")
+                return False
+            
+            logger.info("Starting AI summarize transformation")
+            result = self.llm_client.transform_text(selected_text, "summarize", parameters)
+            
+            if result is None:
+                logger.error("AI summarize transformation failed")
+                return False
+            
+            logger.info("Replacing selected text with summarized version")
+            return self._replace_selection(result)
+            
+        except Exception as e:
+            logger.error(f"Failed to summarize selection: {e}")
+            return False
 
     def _translate_selection(self, parameters: Dict[str, Any] = None) -> bool:
-        logger.info("AI action translate_selection not implemented yet")
-        return False
+        try:
+            if not self.llm_client:
+                logger.error("LLMClient not available for translate action")
+                return False
+            
+            if parameters is None:
+                parameters = {}
+            
+            if "language" not in parameters:
+                parameters["language"] = "English"
+            
+            logger.info(f"Getting selected text for translate to {parameters['language']}")
+            selected_text = self._get_selected_text()
+            if not selected_text or not selected_text.strip():
+                logger.warning("No text selected for translate")
+                return False
+            
+            logger.info("Starting AI translate transformation")
+            result = self.llm_client.transform_text(selected_text, "translate", parameters)
+            
+            if result is None:
+                logger.error("AI translate transformation failed")
+                return False
+            
+            logger.info("Replacing selected text with translated version")
+            return self._replace_selection(result)
+            
+        except Exception as e:
+            logger.error(f"Failed to translate selection: {e}")
+            return False
 
     def _fix_grammar(self, parameters: Dict[str, Any] = None) -> bool:
-        logger.info("AI action fix_grammar not implemented yet")
-        return False
+        try:
+            if not self.llm_client:
+                logger.error("LLMClient not available for fix_grammar action")
+                return False
+            
+            logger.info("Getting selected text for grammar fix")
+            selected_text = self._get_selected_text()
+            if not selected_text or not selected_text.strip():
+                logger.warning("No text selected for grammar fix")
+                return False
+            
+            logger.info("Starting AI grammar fix transformation")
+            result = self.llm_client.transform_text(selected_text, "fix_grammar", parameters)
+            
+            if result is None:
+                logger.error("AI grammar fix transformation failed")
+                return False
+            
+            logger.info("Replacing selected text with grammar-fixed version")
+            return self._replace_selection(result)
+            
+        except Exception as e:
+            logger.error(f"Failed to fix grammar in selection: {e}")
+            return False
 
     def _expand_selection(self, parameters: Dict[str, Any] = None) -> bool:
-        logger.info("AI action expand_selection not implemented yet")
-        return False
+        try:
+            if not self.llm_client:
+                logger.error("LLMClient not available for expand action")
+                return False
+            
+            logger.info("Getting selected text for expansion")
+            selected_text = self._get_selected_text()
+            if not selected_text or not selected_text.strip():
+                logger.warning("No text selected for expansion")
+                return False
+            
+            logger.info("Starting AI expand transformation")
+            result = self.llm_client.transform_text(selected_text, "expand", parameters)
+            
+            if result is None:
+                logger.error("AI expand transformation failed")
+                return False
+            
+            logger.info("Replacing selected text with expanded version")
+            return self._replace_selection(result)
+            
+        except Exception as e:
+            logger.error(f"Failed to expand selection: {e}")
+            return False
 
     def _shorten_selection(self, parameters: Dict[str, Any] = None) -> bool:
-        logger.info("AI action shorten_selection not implemented yet")
-        return False
+        try:
+            if not self.llm_client:
+                logger.error("LLMClient not available for shorten action")
+                return False
+            
+            logger.info("Getting selected text for shortening")
+            selected_text = self._get_selected_text()
+            if not selected_text or not selected_text.strip():
+                logger.warning("No text selected for shortening")
+                return False
+            
+            logger.info("Starting AI shorten transformation")
+            result = self.llm_client.transform_text(selected_text, "shorten", parameters)
+            
+            if result is None:
+                logger.error("AI shorten transformation failed")
+                return False
+            
+            logger.info("Replacing selected text with shortened version")
+            return self._replace_selection(result)
+            
+        except Exception as e:
+            logger.error(f"Failed to shorten selection: {e}")
+            return False
 
     def _convert_to_bullets(self, parameters: Dict[str, Any] = None) -> bool:
-        logger.info("AI action convert_to_bullets not implemented yet")
-        return False
+        try:
+            if not self.llm_client:
+                logger.error("LLMClient not available for convert_to_bullets action")
+                return False
+            
+            logger.info("Getting selected text for bullet conversion")
+            selected_text = self._get_selected_text()
+            if not selected_text or not selected_text.strip():
+                logger.warning("No text selected for bullet conversion")
+                return False
+            
+            logger.info("Starting AI bullet conversion transformation")
+            result = self.llm_client.transform_text(selected_text, "bullets", parameters)
+            
+            if result is None:
+                logger.error("AI bullet conversion transformation failed")
+                return False
+            
+            logger.info("Replacing selected text with bullet points")
+            return self._replace_selection(result)
+            
+        except Exception as e:
+            logger.error(f"Failed to convert text to bullets: {e}")
+            return False
 
     def _convert_to_paragraph(self, parameters: Dict[str, Any] = None) -> bool:
-        logger.info("AI action convert_to_paragraph not implemented yet")
-        return False
+        try:
+            if not self.llm_client:
+                logger.error("LLMClient not available for convert_to_paragraph action")
+                return False
+            
+            logger.info("Getting selected text for paragraph conversion")
+            selected_text = self._get_selected_text()
+            if not selected_text or not selected_text.strip():
+                logger.warning("No text selected for paragraph conversion")
+                return False
+            
+            logger.info("Starting AI paragraph conversion transformation")
+            result = self.llm_client.transform_text(selected_text, "paragraph", parameters)
+            
+            if result is None:
+                logger.error("AI paragraph conversion transformation failed")
+                return False
+            
+            logger.info("Replacing selected text with paragraph")
+            return self._replace_selection(result)
+            
+        except Exception as e:
+            logger.error(f"Failed to convert text to paragraph: {e}")
+            return False
 
 
 if __name__ == "__main__":
     print("Testing WordController")
     print("=" * 60)
     
-    controller = WordController()
+    from llm.llm_client import LLMClient
+    
+    llm_client = LLMClient()
+    controller = WordController(llm_client=llm_client)
     
     print(f"Supported actions: {controller.supported_actions()}")
     print("-" * 40)
@@ -566,31 +787,15 @@ if __name__ == "__main__":
     print(f"Result: {result}")
     
     print("Test: Insert text")
-    result = controller.execute("insert_text", parameters={"text": "Hello, this is a test document created by Mimi. Select this text and try formatting commands."})
-    print(f"Result: {result}")
-    
-    print("Test: Insert blank page")
-    result = controller.execute("insert_blank_page")
-    print(f"Result: {result}")
-    
-    print("Test: Insert text on second page")
-    result = controller.execute("insert_text", parameters={"text": "This is page 2."})
+    result = controller.execute("insert_text", parameters={"text": "This is a test document created by Mimi. It needs to be improved. The grammar is not great and it could be more professional."})
     print(f"Result: {result}")
     
     print("Test: Select all")
     result = controller.execute("select_all")
     print(f"Result: {result}")
     
-    print("Test: Center text")
-    result = controller.execute("align_center")
-    print(f"Result: {result}")
-    
-    print("Test: Format text with bold and alignment")
-    result = controller.execute("format_text", parameters={
-        "bold": True,
-        "alignment": "center",
-        "font_size": 56
-    })
+    print("Test: Rewrite selection (AI action)")
+    result = controller.execute("rewrite", parameters={"tone": "professional"})
     print(f"Result: {result}")
     
     print("Test: Save document")
@@ -600,11 +805,5 @@ if __name__ == "__main__":
     print("Test: Close document")
     result = controller.execute("close_document")
     print(f"Result: {result}")
-    
-    print("-" * 40)
-    print("AI actions (not yet implemented):")
-    for action in ["rewrite_selection", "summarize_selection", "translate_selection", "fix_grammar"]:
-        result = controller.execute(action)
-        print(f"  {action}: {result}")
     
     print("\nTest completed")

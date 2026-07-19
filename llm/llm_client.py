@@ -1,9 +1,11 @@
 import os
 import json
 import logging
+import time
 from typing import Optional, Dict, Any
 from dotenv import load_dotenv
-from groq import Groq
+from openai import OpenAI
+from config.settings import Settings
 from config.prompts import get_system_prompt
 from llm.schemas import AgentResponse, IntentType
 
@@ -14,13 +16,27 @@ logger = logging.getLogger(__name__)
 
 class LLMClient:
     def __init__(self):
-        self.api_key = os.getenv("GROQ_API_KEY")
-        if not self.api_key:
-            logger.error("GROQ_API_KEY not found in environment variables")
-            raise ValueError("GROQ_API_KEY is required")
+        self.settings = Settings()
         
-        self.client = Groq(api_key=self.api_key)
-        self.model = "llama-3.3-70b-versatile"
+        if self.settings.llm_provider == "nvidia":
+            self.api_key = self.settings.nvidia_api_key
+            self.base_url = self.settings.nvidia_base_url
+            self.model = self.settings.model_name
+        else:
+            logger.warning(f"Unsupported provider: {self.settings.llm_provider}, defaulting to NVIDIA")
+            self.api_key = self.settings.nvidia_api_key
+            self.base_url = self.settings.nvidia_base_url
+            self.model = self.settings.model_name
+        
+        if not self.api_key:
+            logger.error("API key not found")
+            raise ValueError("API key is required")
+        
+        self.client = OpenAI(
+            api_key=self.api_key,
+            base_url=self.base_url
+        )
+        
         self.system_prompt = get_system_prompt()
         
         self.transform_prompts = {
@@ -33,10 +49,15 @@ class LLMClient:
             "expand": "Expand and elaborate on the following text. Add more detail, examples, and depth. Make it more comprehensive.\n\nText: {text}\n\nExpanded version:",
             "shorten": "Shorten the following text concisely. Remove unnecessary words, repetition, and fluff while preserving key meaning.\n\nText: {text}\n\nShortened version:",
             "bullets": "Convert the following text into bullet points. Use clear, concise points. Format as a bulleted list.\n\nText: {text}\n\nBullet points:",
-            "paragraph": "Convert the following text into a well-structured paragraph. Ensure smooth flow and logical organization.\n\nText: {text}\n\nParagraph:"
+            "paragraph": "Convert the following text into a well-structured paragraph. Ensure smooth flow and logical organization.\n\nText: {text}\n\nParagraph:",
+            "explain_formula": "Explain the following Excel formula in simple terms. Describe what it calculates and how it works.\n\nFormula: {text}\n\nExplanation:",
+            "summarize_table": "Summarize the following spreadsheet data. Identify key totals, trends, and notable patterns. Keep it brief.\n\nData:\n{text}\n\nSummary:",
+            "generate_sample_data": "Generate realistic sample spreadsheet data based on the following description. Return ONLY the data as rows, one row per line, with comma-separated values, no headers explanation and no additional commentary.\n\nDescription: {text}\n\nData:"
         }
         
-        logger.info("LLMClient initialized successfully")
+        logger.info(f"LLMClient initialized with provider: {self.settings.llm_provider}")
+        logger.info(f"Model: {self.model}")
+        logger.info(f"Base URL: {self.base_url}")
 
     def analyze_command(self, command: str, session_context: Optional[str] = None) -> AgentResponse:
         try:
@@ -45,9 +66,12 @@ class LLMClient:
             if session_context:
                 logger.info("Session context provided")
                 full_prompt = f"{session_context}\n\nUser: {command}"
-                logger.info(f"Enhanced prompt with context")
+                logger.info("Enhanced prompt with context")
             else:
                 full_prompt = command
+            
+            logger.info("API Request Started")
+            start_time = time.time()
             
             response = self.client.chat.completions.create(
                 model=self.model,
@@ -60,11 +84,15 @@ class LLMClient:
                 top_p=0.95
             )
             
+            elapsed_time = time.time() - start_time
+            logger.info(f"API Response Received in {elapsed_time:.2f}s")
+            
             raw_response = response.choices[0].message.content.strip()
-            logger.info(f"Raw LLM response: {raw_response}")
+            logger.info(f"Raw LLM response: {raw_response[:200]}...")
             
             cleaned_response = self._clean_json_response(raw_response)
             parsed_response = json.loads(cleaned_response)
+            logger.info("JSON Parsed Successfully")
             
             return self._parse_to_agent_response(parsed_response)
             
@@ -101,7 +129,8 @@ class LLMClient:
             else:
                 prompt = prompt_template.format(text=text)
             
-            logger.info(f"Sending transformation request to LLM")
+            logger.info("Sending transformation request to LLM")
+            start_time = time.time()
             
             response = self.client.chat.completions.create(
                 model=self.model,
@@ -112,6 +141,9 @@ class LLMClient:
                 max_tokens=2048,
                 top_p=0.95
             )
+            
+            elapsed_time = time.time() - start_time
+            logger.info(f"Transformation completed in {elapsed_time:.2f}s")
             
             transformed_text = response.choices[0].message.content.strip()
             logger.info(f"Transformation successful. Result length: {len(transformed_text)}")
@@ -198,42 +230,47 @@ class LLMClient:
             parameters={},
             url="",
             confidence=0.0
-            )
+        )
 
 
 if __name__ == "__main__":
-    test_commands = [
-        "Open YouTube",
-        "Open GitHub",
-        "Search Google for AI jobs",
-        "Add a blank page in Word",
-        "Center the heading on the first page",
-        "Draw a blue circle in Paint",
-        "Calculate the sum of selected cells in Excel",
-        "Rewrite the selected paragraph professionally",
-        "Some random command that doesnt make sense"
-    ]
-
+    print("Testing LLMClient with NVIDIA Build API")
+    print("=" * 60)
+    
     try:
         client = LLMClient()
         
+        print(f"\nProvider: {client.settings.llm_provider}")
+        print(f"Model: {client.model}")
+        print(f"Base URL: {client.base_url}")
+        
+        test_commands = [
+            "Open YouTube",
+            "Add a blank page in Word",
+            "Center the selected text",
+            "Rewrite this professionally"
+        ]
+        
+        print("\n" + "=" * 60)
+        print("Testing Command Analysis")
+        print("=" * 60)
+        
         for command in test_commands:
-            print("=" * 60)
-            print(f"Command: {command}")
+            print(f"\nCommand: {command}")
+            start_time = time.time()
             result = client.analyze_command(command)
+            elapsed = time.time() - start_time
             
-            print(f"\nParsed AgentResponse:")
-            print(f"  Intent: {result.intent}")
+            print(f"Parsed AgentResponse ({elapsed:.2f}s):")
             print(f"  Application: {result.application}")
+            print(f"  Intent: {result.intent}")
             print(f"  Target: {result.target}")
             print(f"  Action: {result.action}")
             if result.parameters:
                 print(f"  Parameters: {json.dumps(result.parameters, indent=2)}")
-            if result.url:
-                print(f"  URL: {result.url}")
             print(f"  Confidence: {result.confidence}")
-            print("=" * 60)
-            
+            print("-" * 40)
+        
         print("\n" + "=" * 60)
         print("Testing Text Transformation")
         print("=" * 60)
@@ -244,22 +281,21 @@ if __name__ == "__main__":
             ("rewrite", {}),
             ("rewrite", {"tone": "professional"}),
             ("summarize", {}),
-            ("fix_grammar", {}),
-            ("expand", {}),
-            ("shorten", {}),
-            ("bullets", {}),
-            ("paragraph", {})
+            ("fix_grammar", {})
         ]
         
         for action, params in test_actions:
             print(f"\nAction: {action} (params: {params})")
+            start_time = time.time()
             result = client.transform_text(test_text, action, params)
+            elapsed = time.time() - start_time
+            
             if result:
-                print(f"Result: {result[:200]}...")
+                print(f"Result ({elapsed:.2f}s): {result[:150]}...")
             else:
                 print("Result: FAILED")
             print("-" * 40)
-            
+        
         print("\n" + "=" * 60)
         print("Testing Session Context")
         print("=" * 60)
@@ -269,18 +305,26 @@ if __name__ == "__main__":
   - Current Document: Report.docx
   - Current Task: Editing Document
   - Last Action: insert_text
-  - Last Result: Success
-  - Last Activity: 02:30 PM"""
+  - Last Result: Success"""
         
-        print(f"With context:\n{context}")
         command = "Insert a blank page"
+        print(f"Command: {command}")
+        print(f"With context:\n{context}")
+        
+        start_time = time.time()
         result = client.analyze_command(command, session_context=context)
-        print(f"\nParsed AgentResponse:")
-        print(f"  Intent: {result.intent}")
+        elapsed = time.time() - start_time
+        
+        print(f"\nParsed AgentResponse ({elapsed:.2f}s):")
         print(f"  Application: {result.application}")
-        print(f"  Target: {result.target}")
+        print(f"  Intent: {result.intent}")
         print(f"  Action: {result.action}")
         print(f"  Confidence: {result.confidence}")
-            
+        
+        print("\n" + "=" * 60)
+        print("All tests completed successfully!")
+        
     except Exception as e:
         print(f"Test failed: {e}")
+        import traceback
+        traceback.print_exc()

@@ -420,7 +420,8 @@ class WordController:
             start = selection.Start
             end = selection.End
             has_selection = (start != end)
-            self.word.Selection.ParagraphFormat.Alignment = constants.wdAlignParagraphLeft
+            # wdAlignParagraphLeft = 0
+            selection.ParagraphFormat.Alignment = 0
             if has_selection:
                 selection.SetRange(start, end)
             logger.info("Aligned left")
@@ -437,7 +438,8 @@ class WordController:
             start = selection.Start
             end = selection.End
             has_selection = (start != end)
-            self.word.Selection.ParagraphFormat.Alignment = constants.wdAlignParagraphCenter
+            # wdAlignParagraphCenter = 1
+            selection.ParagraphFormat.Alignment = 1
             if has_selection:
                 selection.SetRange(start, end)
             logger.info("Aligned center")
@@ -454,7 +456,8 @@ class WordController:
             start = selection.Start
             end = selection.End
             has_selection = (start != end)
-            self.word.Selection.ParagraphFormat.Alignment = constants.wdAlignParagraphRight
+            # wdAlignParagraphRight = 2
+            selection.ParagraphFormat.Alignment = 2
             if has_selection:
                 selection.SetRange(start, end)
             logger.info("Aligned right")
@@ -471,7 +474,8 @@ class WordController:
             start = selection.Start
             end = selection.End
             has_selection = (start != end)
-            self.word.Selection.ParagraphFormat.Alignment = constants.wdAlignParagraphJustify
+            # wdAlignParagraphJustify = 3
+            selection.ParagraphFormat.Alignment = 3
             if has_selection:
                 selection.SetRange(start, end)
             logger.info("Justified text")

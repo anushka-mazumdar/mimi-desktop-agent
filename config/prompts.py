@@ -114,6 +114,49 @@ Word Action Guidelines for AI actions (these use the LLM to transform selected t
 - "fix_grammar" - Fix grammar of selected text
   Triggers: "fix grammar", "correct spelling", "check grammar"
 
+Excel Action Guidelines:
+- "create_workbook" - Create a new blank workbook (for "open new excel workbook", "open excel", "create a spreadsheet")
+- "create_new" - Alias for create_workbook
+- "open_workbook" - Open an existing workbook (use when user specifies a filename like "open budget.xlsx in excel")
+- "save_workbook" - Save the active workbook
+- "save_workbook_as" - Save as with filepath in parameters
+- "close_workbook" - Close the active workbook
+- "add_worksheet" - Add a new worksheet (name in parameters)
+- "select_worksheet" - Switch to a worksheet by name
+- "write_cell" - Write a value into a single cell (requires cell and value in parameters)
+- "write_range" - Write multiple rows of values starting at a cell (requires cell and values in parameters)
+- "merge_cells" - Merge a cell range (requires range in parameters)
+- "align_left" / "align_center" / "align_right" - Align cell contents (range in parameters, defaults to current selection)
+- "bold_cells" / "italic_cells" / "underline_cells" - Format cell text
+- "currency_format" - Apply currency number formatting to a range
+- "number_format" - Apply a custom number format string
+- "apply_sum" - Insert a SUM formula (requires cell and range in parameters)
+- "apply_average" - Insert an AVERAGE formula (requires cell and range in parameters)
+- "apply_if" - Insert an IF formula (requires cell and condition, true_value, false_value in parameters)
+- "apply_vlookup" - Insert a VLOOKUP formula (requires cell, lookup_value, table_range, col_index)
+- "sort_range" - Sort a range by column (range, column, order in parameters)
+- "apply_filter" - Apply AutoFilter to a range
+- "create_table" - Convert a range into a formatted Excel table
+- "create_chart" - Create a chart from a range (range, chart_type, title in parameters)
+- "clean_duplicates" - Remove duplicate rows from a range
+
+Excel Action Guidelines for AI actions (these use the LLM to generate or interpret spreadsheet content):
+- "generate_sample_data" - Generate sample data and write it into the sheet
+  Triggers: "generate sample data", "fill this with example data", "create dummy data"
+- "explain_formula" - Explain what a formula in a cell does
+  Triggers: "explain this formula", "what does this formula do"
+- "summarize_table" - Summarize the selected table data
+  Triggers: "summarize this data", "summarize the table", "give me an overview of this sheet"
+
+Understanding Excel Commands:
+- "open excel" → create_workbook (create new workbook)
+- "create a spreadsheet" → create_workbook
+- "open <filename> in excel" → open_workbook with filepath parameter
+- "apply sum formula" / "calculate the total" (in Excel context) → apply_sum
+- "sort this data" → sort_range
+- "explain this formula" → explain_formula
+- "summarize this data" → summarize_table
+
 Understanding Word Commands:
 - "open word" → create_document (create new document)
 - "open word document" → create_document (create new document)
@@ -193,11 +236,23 @@ Output: {"intent":"paint_action","application":"paint","target":"canvas","action
 Input: "Draw a blue circle"
 Output: {"intent":"paint_action","application":"","target":"canvas","action":"draw_circle","parameters":{"clarification_required":true,"question":"Which application should I draw in?","options":["Microsoft Paint","Microsoft Word","Microsoft PowerPoint"]},"url":"","confidence":0.90}
 
-Input: "Apply sum formula on selected cells"
-Output: {"intent":"excel_action","application":"excel","target":"selected_cells","action":"apply_sum","parameters":{"formula":"SUM"},"url":"","confidence":0.94}
+Input: "Sum A1 to A10 into A11 in Excel"
+Output: {"intent":"excel_action","application":"excel","target":"A1:A10","action":"apply_sum","parameters":{"cell":"A11","range":"A1:A10"},"url":"","confidence":0.94}
 
 Input: "Calculate the sum"
 Output: {"intent":"excel_action","application":"","target":"data","action":"calculate_sum","parameters":{"clarification_required":true,"question":"Which application contains the data to sum?","options":["Microsoft Excel","Microsoft Word"]},"url":"","confidence":0.88}
+
+Input: "Open excel"
+Output: {"intent":"excel_action","application":"excel","target":"workbook","action":"create_workbook","parameters":{},"url":"","confidence":0.95}
+
+Input: "Write Revenue in A1 in Excel"
+Output: {"intent":"excel_action","application":"excel","target":"A1","action":"write_cell","parameters":{"cell":"A1","value":"Revenue"},"url":"","confidence":0.93}
+
+Input: "Explain this formula"
+Output: {"intent":"excel_action","application":"excel","target":"selection","action":"explain_formula","parameters":{},"url":"","confidence":0.90}
+
+Input: "Summarize this data"
+Output: {"intent":"excel_action","application":"excel","target":"selection","action":"summarize_table","parameters":{},"url":"","confidence":0.90}
 
 Input: "Center the heading"
 Output: {"intent":"word_action","application":"","target":"heading","action":"center_text","parameters":{"clarification_required":true,"question":"Which application contains the heading?","options":["Microsoft Word","Microsoft Excel","Microsoft PowerPoint"]},"url":"","confidence":0.87}
@@ -209,6 +264,9 @@ Important:
 - When user says "fix grammar", "correct spelling" → fix_grammar on selected text
 - When user says "open word", "open word document", "open new word document" → create_document
 - When user says "open <filename> in word" → open_document with filepath
+- When user says "open excel", "open excel workbook", "create a spreadsheet" → create_workbook
+- When user says "explain this formula" → explain_formula on selected cell
+- When user says "summarize this data/table" → summarize_table on selected range
 - Be decisive when the application is explicitly mentioned.
 - Ask for clarification when the application is ambiguous.
 - Confidence should reflect how certain you are about the intent and application.

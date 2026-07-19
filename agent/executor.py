@@ -4,6 +4,7 @@ from llm.llm_client import LLMClient
 from llm.schemas import AgentResponse, IntentType
 from capabilities.browser.browser_controller import BrowserController
 from capabilities.office.word_controller import WordController
+from capabilities.office.excel_controller import ExcelController
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -13,6 +14,7 @@ class Executor:
         self.llm_client = llm_client
         self.browser = None
         self.word = None
+        self.excel = None
         logger.info("Executor initialized successfully")
 
     def execute(self, response: AgentResponse) -> bool:
@@ -24,7 +26,10 @@ class Executor:
             
             elif response.application == "word":
                 return self._execute_word(response)
-            
+
+            elif response.application == "excel":
+                return self._execute_excel(response)
+
             else:
                 logger.warning(f"Application not supported: {response.application}")
                 return False
@@ -44,6 +49,12 @@ class Executor:
             logger.info("Initializing WordController")
             self.word = WordController(llm_client=self.llm_client)
         return self.word
+
+    def _get_excel(self) -> ExcelController:
+        if self.excel is None:
+            logger.info("Initializing ExcelController")
+            self.excel = ExcelController(llm_client=self.llm_client)
+        return self.excel
 
     def _execute_browser(self, response: AgentResponse) -> bool:
         try:
@@ -87,9 +98,27 @@ class Executor:
             
             logger.info(f"Word execution result: {result}")
             return result
-            
+
         except Exception as e:
             logger.error(f"Word execution failed: {e}")
+            return False
+
+    def _execute_excel(self, response: AgentResponse) -> bool:
+        try:
+            logger.info(f"Excel action: {response.action}, Target: {response.target}")
+            excel = self._get_excel()
+
+            result = excel.execute(
+                action=response.action,
+                target=response.target,
+                parameters=response.parameters
+            )
+
+            logger.info(f"Excel execution result: {result}")
+            return result
+
+        except Exception as e:
+            logger.error(f"Excel execution failed: {e}")
             return False
 
 
@@ -166,6 +195,24 @@ if __name__ == "__main__":
             parameters={},
             url="",
             confidence=0.80
+        ),
+        AgentResponse(
+            intent=IntentType.EXCEL_ACTION,
+            application="excel",
+            target="workbook",
+            action="create_workbook",
+            parameters={},
+            url="",
+            confidence=0.90
+        ),
+        AgentResponse(
+            intent=IntentType.EXCEL_ACTION,
+            application="excel",
+            target="A1",
+            action="write_cell",
+            parameters={"cell": "A1", "value": "Revenue"},
+            url="",
+            confidence=0.85
         ),
         AgentResponse(
             intent=IntentType.UNKNOWN,
